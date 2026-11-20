@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "supersurvival:block/portal_block"
+    }
+  }
+}

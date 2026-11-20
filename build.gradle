@@ -1,0 +1,19 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+group = 'com.example.supersurvival'
+version = '2.1.0'
+base { archivesName = 'supersurvival' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    runs {
+        client { workingDirectory project.file('run'); mods { supersurvival { source sourceSets.main } } }
+        server { workingDirectory project.file('run'); args '--nogui'; mods { supersurvival { source sourceSets.main } } }
+    }
+}
+repositories { mavenCentral() }
+dependencies { minecraft 'net.minecraftforge:forge:1.20.1-47.3.0' }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
