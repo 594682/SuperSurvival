@@ -1,43 +1,56 @@
-#!/usr/bin/env python3
-"""检查 Forge 模组项目的资源和 GitHub 工作流（不执行 Java 编译）。"""
+name: Build Super Survival (Forge 1.20.1)
 
-import json
-from pathlib import Path
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
 
-root = Path(__file__).resolve().parents[1]
-resources = root / "src/main/resources"
-java_dir = root / "src/main/java/com/example/supersurvival"
+permissions:
+  contents: read
 
-# 1. 检查 JSON 文件
-checked = 0
-for path in resources.rglob("*.json"):
-    json.loads(path.read_text(encoding="utf-8"))
-    checked += 1
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
 
-# 2. 检查主要 Java 文件是否存在、是否包含明显的括号问题
-for name in ("SuperSurvival.java", "ClientControls.java", "Trades.java"):
-    code = (java_dir / name).read_text(encoding="utf-8")
-    assert code.count("{") == code.count("}"), f"Braces mismatch: {name}"
-    assert code.count("(") == code.count(")"), f"Parentheses mismatch: {name}"
-    assert "SavedData.Factory" not in code, f"1.20.1 incompatible API: {name}"
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-# 3. 检查模组元数据及头像
-mods_toml = (resources / "META-INF/mods.toml").read_text(encoding="utf-8")
-assert 'modId="supersurvival"' in mods_toml
-assert 'logoFile="logo.png"' in mods_toml
-assert 'version="2.1.0"' in mods_toml
-assert (resources / "logo.png").is_file()
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-# 4. 同时兼容 main.yml 和 build.yml，解决原有的文件名不匹配错误
-workflows = root / ".github/workflows"
-workflow_path = next(
-    (path for path in (workflows / "main.yml", workflows / "build.yml") if path.is_file()),
-    None,
-)
-assert workflow_path is not None, "Missing .github/workflows/main.yml or build.yml"
-workflow = workflow_path.read_text(encoding="utf-8")
-assert "gradle --no-daemon clean build" in workflow
-assert "actions/upload-artifact@" in workflow
+      - name: Install Gradle 8.1.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.1.1'
 
-print(f"PASS: {checked} JSON files, 3 Java files, mod icon, workflow {workflow_path.name}")
-print("NOTE: Static checks passed; actual Forge compilation runs in the next GitHub Actions step.")
+      - name: Extract final project from project.b64
+        run: |
+          base64 -d project.b64 > project.zip
+          unzip -o project.zip
+          ls -la
+
+      - name: Build Forge mod
+        run: |
+          set -o pipefail
+          gradle --no-daemon clean build --stacktrace 2>&1 | tee build.log
+
+      - name: Upload JAR
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuperSurvival-Forge-1.20.1-JAR
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuperSurvival-build-log
+          path: build.log
+          if-no-files-found: ignore
